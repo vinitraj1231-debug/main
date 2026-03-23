@@ -1118,17 +1118,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 #  🚀  MAIN
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def main():
-    log.info("🚀 Starting Telegram Bot v5.0 (OpenAI SDK + OpenRouter)...")
-    log.info("🔑 Key: sk-or-v1-...%s", OPENROUTER_KEY[-8:])
-    log.info("🤖 Models: %s", AI_MODELS)
-
+def _build_app():
     app = Application.builder().token(BOT_TOKEN).build()
-
     AF = filters.User(ADMIN_ID)
     UF = ~AF
-
-    # Admin commands
     app.add_handler(CommandHandler("start",           cmd_start,           filters=AF))
     app.add_handler(CommandHandler("online",          cmd_online,          filters=AF))
     app.add_handler(CommandHandler("offline",         cmd_offline,         filters=AF))
@@ -1143,30 +1136,45 @@ def main():
     app.add_handler(CommandHandler("broadcast",       cmd_broadcast,       filters=AF))
     app.add_handler(CommandHandler("broadcast_media", cmd_broadcast_media, filters=AF))
     app.add_handler(CommandHandler("cancel",          cmd_cancel,          filters=AF))
-
-    # Admin input (FSM + reply-to)
-    app.add_handler(MessageHandler(
-        AF & (filters.TEXT | filters.PHOTO | filters.VIDEO),
-        admin_input,
-    ))
-
-    # Callback buttons
+    app.add_handler(MessageHandler(AF & (filters.TEXT | filters.PHOTO | filters.VIDEO), admin_input))
     app.add_handler(CallbackQueryHandler(on_callback))
-
-    # User
     app.add_handler(CommandHandler("start", user_start, filters=UF))
     app.add_handler(MessageHandler(
         UF & ~filters.COMMAND & (
-            filters.TEXT    | filters.PHOTO   | filters.VIDEO  |
-            filters.AUDIO   | filters.Document.ALL             |
-            filters.VOICE   | filters.Sticker.ALL
+            filters.TEXT  | filters.PHOTO | filters.VIDEO |
+            filters.AUDIO | filters.Document.ALL |
+            filters.VOICE | filters.Sticker.ALL
         ),
         user_message,
     ))
+    return app
 
+
+async def _async_main():
+    log.info("🚀 Starting Telegram Bot v5.1 (OpenAI SDK + OpenRouter)...")
+    log.info("🔑 Key: sk-or-v1-...%s", OPENROUTER_KEY[-8:])
+    log.info("🤖 Models: %s", AI_MODELS)
+
+    app = _build_app()
     log.info("✅ Bot live! Admin ID: %s", ADMIN_ID)
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+        log.info("🟢 Polling started. Ctrl+C to stop.")
+        try:
+            await asyncio.Event().wait()
+        except (KeyboardInterrupt, SystemExit):
+            log.info("🛑 Shutdown.")
+        finally:
+            await app.updater.stop()
+            await app.stop()
+            await app.shutdown()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(_async_main())
